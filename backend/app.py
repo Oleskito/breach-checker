@@ -28,6 +28,7 @@ def check():
     if "hash" not in data:
         return jsonify({"error": "brak pola 'hash'"}), 400
 
+
     h = str(data["hash"]).lower()
     if not re.fullmatch(r"[0-9a-f]{40}", h):
         return jsonify({"error": "pole 'hash' musi być skrótem SHA-1 (40 znaków hex)"}), 400
