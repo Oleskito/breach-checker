@@ -1,5 +1,6 @@
 FROM python:3.12-slim
 # Użytkownik systemowy bez hasła i bez katalogu domowego - na nim działa aplikacja
+LABEL org.opencontainers.image.source="https://github.com/Oleskito/breach-checker"
 RUN useradd --system --no-create-home appuser
 WORKDIR /app
 COPY requirements.txt .
