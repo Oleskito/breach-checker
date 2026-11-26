@@ -2,22 +2,23 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "8080:80"          # jedyny port opublikowany na hoście
+      - "8080:80" # jedyny port opublikowany na hoście
     depends_on:
       backend:
         condition: service_healthy
 
-
   backend:
     build: ./backend
-    read_only: true               # system plików kontenera tylko do odczytu
+    read_only: true # system plików kontenera tylko do odczytu
     cap_drop:
-      - ALL                       # odebranie wszystkich uprawnień jądra (capabilities)
+      - ALL # odebranie wszystkich uprawnień jądra (capabilities)
     security_opt:
-      - no-new-privileges:true    # proces nie może zyskać uprawnień (np. przez setuid)
+      - no-new-privileges:true # proces nie może zyskać uprawnień (np. przez setuid)
     tmpfs:
       - /tmp
     environment:
+      REDIS_HOST: redis
+      LOG_URL: http://log:5001/log
       DB_HOST: db
       DB_NAME: ${POSTGRES_DB}
       DB_USER: ${POSTGRES_USER}
@@ -26,7 +27,7 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "\"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\""] 
+      test: [ "CMD", "python", "-c", "\"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\"" ]
 
   db:
     image: postgres:16-alpine
@@ -39,10 +40,57 @@ services:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./data/leaked-sha1.txt:/data/leaked-sha1.txt:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 5s
       timeout: 3s
       retries: 5
+  log:
+    build: ./log
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+  redis:
+    image: redis:8-alpine
+    # Cache, nie magazyn: bez zapisu na dysk (skróty sprawdzanych haseł nie trafiają do pliku)
+    command: [ "redis-server", "--save", "", "--appendonly", "no" ]
+    # --- Monitoring: uruchamiany tylko z --profile monitoring ---
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    profiles: [ monitoring ]
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [ monitoring ]
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    profiles: [ monitoring ]
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
 
 volumes:
   pgdata:
